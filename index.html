@@ -325,9 +325,8 @@
                 const { data, error } = await supabase
                     .from('messages')
                     .select('*')
-                    .contains('participants', [currentUser.id])
-                    .in('from_user', [currentUser.id, currentChatWith])
-                    .in('to_user', [currentUser.id, currentChatWith])
+                    .or(`from_user.eq.${currentUser.id},to_user.eq.${currentUser.id}`)
+                    .or(`from_user.eq.${currentChatWith},to_user.eq.${currentChatWith}`)
                     .order('created_at', { ascending: true });
 
                 if (error) {
