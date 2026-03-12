@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мессенджер на Supabase</title>
+    <style>
+        /* Все стили из style.css */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+
+        #app {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        header {
+            background: #4a76a8;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        #user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #copy-link {
+            background: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        main {
+            padding: 1rem;
+        }
+
+        #dialogs-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .dialog-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .dialog-item:hover {
+            background: #f0f0f0;
+        }
+
+        .dialog-user {
+            font-weight: bold;
+        }
+
+        .dialog-last {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        #chat-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #back-to-dialogs {
+            background: #4a76a8;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #messages-container {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 8px;
+            max-width: 70%;
+        }
+
+        .message.sent {
+            background: #dcf8c6;
+            margin-left: auto;
+        }
+
+        .message.received {
+            background: #fff;
+            border: 1px solid #ddd;
+        }
+
+        .message img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+
+        .message small {
+            display: block;
+            color: #999;
+            font-size: 0.7rem;
+            margin-top: 5px;
+        }
+
+        #message-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #message-text {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #message-form button {
+            background: #4a76a8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+    <!-- Подключаем Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Мессенджер</h1>
+            <div id="user-info">
+                <span>Ваш ID: <strong id="my-id"></strong></span>
+                <button id="copy-link">Копировать ссылку</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="dialogs-view" style="display: none;">
+                <h2>Диалоги</h2>
+                <ul id="dialogs-list"></ul>
+            </div>
+
+            <div id="chat-view" style="display: none;">
+                <div id="chat-header">
+                    <button id="back-to-dialogs">← Назад</button>
+                    <h3>Чат с <span id="chat-with"></span></h3>
+                </div>
+                <div id="messages-container"></div>
+                <form id="message-form">
+                    <input type="text" id="message-text" placeholder="Введите сообщение...">
+                    <input type="file" id="message-image" accept="image/*">
+                    <button type="submit">Отправить</button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Здесь будет весь JavaScript код с вашими ключами Supabase
+        (function() {
+            // --- НАЧАЛО КОДА ---
+
+            // ВСТАВЬТЕ СЮДА ВАШИ КЛЮЧИ SUPABASE
+            const SUPABASE_URL = 'https://soalwapjiotuzkbrdnkv.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvYWx1YXBqaW90dXprYnJkbmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzUzMDAsImV4cCI6MjA4ODkxMTMwMH0.-EaMWQ45mzfQVyfjzIE-Po5AAlu0uSU7YovJuihnszk';
+
+            console.log('Supabase URL:', SUPABASE_URL);
+            console.log('Anon key length:', SUPABASE_ANON_KEY.length);
+
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client created');
+
+            // Состояние
+            let currentUser = null;
+            let currentChatWith = null;
+            let subscriptionMessages = null;
+
+            // Элементы DOM
+            const myIdSpan = document.getElementById('my-id');
+            const copyLinkBtn = document.getElementById('copy-link');
+            const dialogsView = document.getElementById('dialogs-view');
+            const chatView = document.getElementById('chat-view');
+            const dialogsList = document.getElementById('dialogs-list');
+            const chatWithSpan = document.getElementById('chat-with');
+            const messagesContainer = document.getElementById('messages-container');
+            const messageForm = document.getElementById('message-form');
+            const messageText = document.getElementById('message-text');
+            const messageImage = document.getElementById('message-image');
+            const backBtn = document.getElementById('back-to-dialogs');
+
+            console.log('DOM elements found:', !!myIdSpan);
+
+            // Анонимная аутентификация
+            async function signInAnonymously() {
+                console.log('Starting anonymous sign-in...');
+                try {
+                    const { data, error } = await supabase.auth.signInAnonymously();
+                    if (error) {
+                        console.error('Auth error:', error);
+                        return;
+                    }
+                    console.log('Sign-in successful:', data);
+                    currentUser = data.user;
+                    myIdSpan.textContent = currentUser.id;
+                    console.log('User ID set in UI:', currentUser.id);
+                    handleUrlParams();
+                } catch (err) {
+                    console.error('Exception in signInAnonymously:', err);
+                }
+            }
+
+            // Вызов аутентификации
+            signInAnonymously();
+
+            // Копирование ссылки
+            copyLinkBtn.addEventListener('click', () => {
+                if (!currentUser) {
+                    alert('Пользователь ещё не загружен, подождите');
+                    return;
+                }
+                const link = `${window.location.origin}${window.location.pathname}?to=${currentUser.id}`;
+                navigator.clipboard.writeText(link).then(() => {
+                    alert('Ссылка скопирована!');
+                }).catch(err => console.error('Copy failed:', err));
+            });
+
+            // Загрузка диалогов
+            async function loadDialogs() {
+                console.log('loadDialogs called, currentUser:', currentUser);
+                if (!currentUser) return;
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .contains('participants', [currentUser.id])
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('Ошибка загрузки диалогов', error);
+                    return;
+                }
+
+                console.log('Dialogs data:', data);
+
+                const dialogsMap = new Map();
+                data.forEach(msg => {
+                    const otherId = msg.from_user === currentUser.id ? msg.to_user : msg.from_user;
+                    if (!dialogsMap.has(otherId)) {
+                        dialogsMap.set(otherId, {
+                            lastMessage: msg.text || (msg.image_url ? '[Изображение]' : ''),
+                            lastTimestamp: new Date(msg.created_at).getTime()
+                        });
+                    }
+                });
+
+                const dialogs = Array.from(dialogsMap.entries()).map(([userId, info]) => ({
+                    userId,
+                    ...info
+                })).sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+
+                renderDialogs(dialogs);
+            }
+
+            function renderDialogs(dialogs) {
+                dialogsList.innerHTML = '';
+                dialogs.forEach(dialog => {
+                    const li = document.createElement('li');
+                    li.className = 'dialog-item';
+                    li.innerHTML = `
+                        <span class="dialog-user">${dialog.userId}</span>
+                        <span class="dialog-last">${dialog.lastMessage}</span>
+                    `;
+                    li.addEventListener('click', () => {
+                        window.location.search = `?to=${dialog.userId}`;
+                    });
+                    dialogsList.appendChild(li);
+                });
+            }
+
+            // Загрузка сообщений для текущего чата
+            async function loadMessages() {
+                console.log('loadMessages called, currentChatWith:', currentChatWith);
+                if (!currentUser || !currentChatWith) return;
+
+                if (subscriptionMessages) {
+                    subscriptionMessages.unsubscribe();
+                    subscriptionMessages = null;
+                }
+
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .contains('participants', [currentUser.id])
+                    .in('from_user', [currentUser.id, currentChatWith])
+                    .in('to_user', [currentUser.id, currentChatWith])
+                    .order('created_at', { ascending: true });
+
+                if (error) {
+                    console.error('Ошибка загрузки сообщений', error);
+                    return;
+                }
+
+                console.log('Messages loaded:', data);
+                renderMessages(data);
+
+                // Подписка на новые сообщения
+                subscriptionMessages = supabase
+                    .channel('messages-channel')
+                    .on('postgres_changes', { 
+                        event: 'INSERT', 
+                        schema: 'public', 
+                        table: 'messages',
+                        filter: `participants=cs.{${currentUser.id}}` 
+                    }, payload => {
+                        console.log('New message received:', payload.new);
+                        const newMsg = payload.new;
+                        if ((newMsg.from_user === currentChatWith && newMsg.to_user === currentUser.id) ||
+                            (newMsg.from_user === currentUser.id && newMsg.to_user === currentChatWith)) {
+                            appendMessage(newMsg);
+                        }
+                    })
+                    .subscribe();
+            }
+
+            function renderMessages(messages) {
+                messagesContainer.innerHTML = '';
+                messages.forEach(msg => appendMessage(msg));
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            function appendMessage(msg) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${msg.from_user === currentUser.id ? 'sent' : 'received'}`;
+
+                let content = '';
+                if (msg.text) content += `<p>${msg.text}</p>`;
+                if (msg.image_url) content += `<img src="${msg.image_url}" alt="image">`;
+                content += `<small>${new Date(msg.created_at).toLocaleTimeString()}</small>`;
+
+                messageDiv.innerHTML = content;
+                messagesContainer.appendChild(messageDiv);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            // Отправка сообщения
+            messageForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                console.log('Submit message');
+                if (!currentUser || !currentChatWith) {
+                    alert('Нет собеседника или пользователь не авторизован');
+                    return;
+                }
+
+                const text = messageText.value.trim();
+                const imageFile = messageImage.files[0];
+
+                if (!text && !imageFile) return;
+
+                let image_url = null;
+                if (imageFile) {
+                    const fileExt = imageFile.name.split('.').pop();
+                    const fileName = `${Date.now()}.${fileExt}`;
+                    console.log('Uploading image:', fileName);
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('images')
+                        .upload(fileName, imageFile);
+
+                    if (uploadError) {
+                        console.error('Ошибка загрузки изображения', uploadError);
+                        alert('Ошибка загрузки изображения: ' + uploadError.message);
+                        return;
+                    }
+
+                    const { data: urlData } = supabase.storage
+                        .from('images')
+                        .getPublicUrl(fileName);
+                    image_url = urlData.publicUrl;
+                    console.log('Image uploaded, URL:', image_url);
+                }
+
+                const message = {
+                    from_user: currentUser.id,
+                    to_user: currentChatWith,
+                    participants: [currentUser.id, currentChatWith],
+                    text: text || '',
+                    image_url
+                };
+
+                console.log('Sending message:', message);
+                const { error } = await supabase
+                    .from('messages')
+                    .insert([message]);
+
+                if (error) {
+                    console.error('Ошибка отправки', error);
+                    alert('Ошибка отправки: ' + error.message);
+                    return;
+                }
+
+                messageText.value = '';
+                messageImage.value = '';
+                console.log('Message sent');
+            });
+
+            // Переключение между режимами
+            function showView(view) {
+                console.log('Switching to view:', view);
+                if (view === 'dialogs') {
+                    dialogsView.style.display = 'block';
+                    chatView.style.display = 'none';
+                    if (subscriptionMessages) {
+                        subscriptionMessages.unsubscribe();
+                        subscriptionMessages = null;
+                    }
+                    loadDialogs();
+                } else if (view === 'chat') {
+                    dialogsView.style.display = 'none';
+                    chatView.style.display = 'block';
+                    chatWithSpan.textContent = currentChatWith;
+                    loadMessages();
+                }
+            }
+
+            // Обработка параметров URL
+            function handleUrlParams() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const to = urlParams.get('to');
+                console.log('URL param to:', to, 'currentUser:', currentUser);
+
+                if (to && to !== currentUser?.id) {
+                    currentChatWith = to;
+                    showView('chat');
+                } else {
+                    currentChatWith = null;
+                    showView('dialogs');
+                }
+            }
+
+            backBtn.addEventListener('click', () => {
+                window.location.search = '';
+            });
+
+            window.addEventListener('popstate', () => {
+                if (currentUser) handleUrlParams();
+            });
+
+            console.log('Initialization complete.');
+            // --- КОНЕЦ КОДА ---
+        })();
+    </script>
+</body>
+</html>
