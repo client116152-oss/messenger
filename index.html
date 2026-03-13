@@ -258,6 +258,14 @@
         #dialogs-view {
             display: block;
         }
+        /* Индикатор загрузки */
+        .fa-spinner {
+            animation: spin 1s infinite linear;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -300,7 +308,7 @@
 
     <script>
         (function() {
-            // --- ЗАМЕНИТЕ НА СВОИ КЛЮЧИ, ЕСЛИ НУЖНО ---
+            // --- НАСТРОЙКИ SUPABASE (проверьте, что ключи актуальны) ---
             const SUPABASE_URL = 'https://xhngobdwuxfqhwqebujy.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhobmdvYmR3dXhmcWh3cWVidWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzcyNTcsImV4cCI6MjA4ODkxMzI1N30.FXw6_rJdveQG1D3fBiP3QO1gPht6LKeikLb1QinR9vc';
 
@@ -322,7 +330,7 @@
             const messageImage = document.getElementById('message-image');
             const backBtn = document.getElementById('back-to-dialogs');
 
-            // Аутентификация
+            // Анонимная аутентификация
             async function signInAnonymously() {
                 try {
                     const { data: { session } } = await supabase.auth.getSession();
@@ -343,12 +351,14 @@
             }
             signInAnonymously();
 
+            // Копирование ссылки
             copyLinkBtn.addEventListener('click', () => {
-                if (!currentUser) return alert('Подождите...');
+                if (!currentUser) return alert('Подождите, идёт загрузка...');
                 const link = `${window.location.origin}${window.location.pathname}?to=${currentUser.id}`;
                 navigator.clipboard.writeText(link).then(() => alert('Ссылка скопирована!'));
             });
 
+            // Загрузка списка диалогов
             async function loadDialogs() {
                 if (!currentUser) return;
                 const { data, error } = await supabase
@@ -401,6 +411,7 @@
                 });
             }
 
+            // Улучшенная загрузка сообщений без лишних перерисовок
             async function loadMessages() {
                 if (!currentUser || !currentChatWith) return;
 
@@ -415,15 +426,19 @@
                     return;
                 }
 
-                renderMessages(data);
+                // Проверяем, нужно ли обновлять DOM
+                const currentLastId = messagesContainer.lastElementChild?.dataset?.messageId;
+                const newLastId = data[data.length-1]?.id;
+
+                if (data.length === 0) {
+                    messagesContainer.innerHTML = '<div class="empty-state">Нет сообщений. Напишите что-нибудь!</div>';
+                } else if (currentLastId !== newLastId) {
+                    renderMessages(data);
+                }
             }
 
             function renderMessages(messages) {
                 messagesContainer.innerHTML = '';
-                if (messages.length === 0) {
-                    messagesContainer.innerHTML = '<div class="empty-state">Нет сообщений. Напишите что-нибудь!</div>';
-                    return;
-                }
                 messages.forEach(msg => appendMessage(msg));
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
@@ -431,6 +446,7 @@
             function appendMessage(msg) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${msg.from_user === currentUser.id ? 'sent' : 'received'}`;
+                messageDiv.dataset.messageId = msg.id; // для отслеживания изменений
 
                 let content = '';
                 if (msg.text) content += `<p>${msg.text}</p>`;
@@ -442,6 +458,7 @@
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
 
+            // Отправка сообщения
             messageForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 if (!currentUser || !currentChatWith) {
@@ -456,21 +473,35 @@
 
                 let image_url = null;
                 if (imageFile) {
-                    const fileExt = imageFile.name.split('.').pop();
-                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                    const { error: uploadError } = await supabase.storage
-                        .from('images')
-                        .upload(fileName, imageFile);
+                    const uploadButton = messageForm.querySelector('button[type="submit"]');
+                    const originalText = uploadButton.innerHTML;
+                    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                    uploadButton.disabled = true;
 
-                    if (uploadError) {
-                        alert('Ошибка загрузки: ' + uploadError.message);
+                    try {
+                        const fileExt = imageFile.name.split('.').pop();
+                        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                        const { error: uploadError } = await supabase.storage
+                            .from('images')
+                            .upload(fileName, imageFile);
+
+                        if (uploadError) {
+                            throw new Error('Ошибка загрузки изображения. Убедитесь, что настроены политики Storage (см. инструкцию).');
+                        }
+
+                        const { data: urlData } = supabase.storage
+                            .from('images')
+                            .getPublicUrl(fileName);
+                        image_url = urlData.publicUrl;
+                    } catch (err) {
+                        alert(err.message);
+                        uploadButton.innerHTML = originalText;
+                        uploadButton.disabled = false;
                         return;
                     }
 
-                    const { data: urlData } = supabase.storage
-                        .from('images')
-                        .getPublicUrl(fileName);
-                    image_url = urlData.publicUrl;
+                    uploadButton.innerHTML = originalText;
+                    uploadButton.disabled = false;
                 }
 
                 const message = {
@@ -492,9 +523,10 @@
 
                 messageText.value = '';
                 messageImage.value = '';
-                await loadMessages();
+                await loadMessages(); // сразу показываем отправленное сообщение
             });
 
+            // Переключение между режимами
             function showView(view) {
                 if (view === 'dialogs') {
                     dialogsView.style.display = 'block';
@@ -506,7 +538,7 @@
                     loadDialogs();
                 } else if (view === 'chat') {
                     dialogsView.style.display = 'none';
-                    chatView.style.display = 'flex';  // обязательно flex, чтобы форма была видна
+                    chatView.style.display = 'flex';
                     chatWithSpan.textContent = currentChatWith.slice(0,8) + '...';
                     loadMessages();
 
@@ -515,7 +547,7 @@
                         if (currentUser && currentChatWith) {
                             loadMessages();
                         }
-                    }, 2000);
+                    }, 3000); // увеличен интервал до 3 секунд
                 }
             }
 
