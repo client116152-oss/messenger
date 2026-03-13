@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мессенджер на Supabase</title>
-    <!-- Шрифт и иконки Font Awesome (для красоты) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * {
@@ -250,22 +249,16 @@
             color: #aaa;
             margin-top: 50px;
         }
-        .loading {
-            text-align: center;
-            color: #888;
-        }
-        /* Исправление видимости форм */
+        /* Управление видимостью */
         #chat-view {
             display: none;
-            height: 100%;
             flex-direction: column;
+            height: 100%;
         }
         #dialogs-view {
             display: block;
-            height: 100%;
         }
     </style>
-    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -293,7 +286,7 @@
                     <h3>Чат с <span id="chat-with"></span></h3>
                 </div>
                 <div id="messages-container">
-                    <div class="empty-state">Выберите диалог или отправьте первое сообщение</div>
+                    <div class="empty-state">Загрузка сообщений...</div>
                 </div>
                 <form id="message-form">
                     <input type="text" id="message-text" placeholder="Введите сообщение..." autocomplete="off">
@@ -307,18 +300,16 @@
 
     <script>
         (function() {
-            // --- НАСТРОЙКИ SUPABASE (ЗАМЕНИТЕ НА СВОИ) ---
+            // --- ЗАМЕНИТЕ НА СВОИ КЛЮЧИ, ЕСЛИ НУЖНО ---
             const SUPABASE_URL = 'https://xhngobdwuxfqhwqebujy.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhobmdvYmR3dXhmcWh3cWVidWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzcyNTcsImV4cCI6MjA4ODkxMzI1N30.FXw6_rJdveQG1D3fBiP3QO1gPht6LKeikLb1QinR9vc';
 
             const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            // Состояние
             let currentUser = null;
             let currentChatWith = null;
             let pollInterval = null;
 
-            // Элементы DOM
             const myIdSpan = document.getElementById('my-id');
             const copyLinkBtn = document.getElementById('copy-link');
             const dialogsView = document.getElementById('dialogs-view');
@@ -331,7 +322,7 @@
             const messageImage = document.getElementById('message-image');
             const backBtn = document.getElementById('back-to-dialogs');
 
-            // Анонимная аутентификация
+            // Аутентификация
             async function signInAnonymously() {
                 try {
                     const { data: { session } } = await supabase.auth.getSession();
@@ -341,7 +332,6 @@
                         handleUrlParams();
                         return;
                     }
-
                     const { data, error } = await supabase.auth.signInAnonymously();
                     if (error) throw error;
                     currentUser = data.user;
@@ -351,18 +341,14 @@
                     console.error('Auth error:', err);
                 }
             }
-
-            // Запуск аутентификации
             signInAnonymously();
 
-            // Копирование ссылки
             copyLinkBtn.addEventListener('click', () => {
-                if (!currentUser) return alert('Подождите, идёт загрузка...');
+                if (!currentUser) return alert('Подождите...');
                 const link = `${window.location.origin}${window.location.pathname}?to=${currentUser.id}`;
                 navigator.clipboard.writeText(link).then(() => alert('Ссылка скопирована!'));
             });
 
-            // Загрузка списка диалогов
             async function loadDialogs() {
                 if (!currentUser) return;
                 const { data, error } = await supabase
@@ -415,7 +401,6 @@
                 });
             }
 
-            // Загрузка сообщений для текущего чата
             async function loadMessages() {
                 if (!currentUser || !currentChatWith) return;
 
@@ -457,7 +442,6 @@
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
 
-            // Отправка сообщения
             messageForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 if (!currentUser || !currentChatWith) {
@@ -508,11 +492,9 @@
 
                 messageText.value = '';
                 messageImage.value = '';
-                // После отправки сразу обновляем сообщения
                 await loadMessages();
             });
 
-            // Переключение между режимами
             function showView(view) {
                 if (view === 'dialogs') {
                     dialogsView.style.display = 'block';
@@ -524,12 +506,10 @@
                     loadDialogs();
                 } else if (view === 'chat') {
                     dialogsView.style.display = 'none';
-                    chatView.style.display = 'flex'; // flex, чтобы форма была видна
-                    chatView.style.flexDirection = 'column';
+                    chatView.style.display = 'flex';  // обязательно flex, чтобы форма была видна
                     chatWithSpan.textContent = currentChatWith.slice(0,8) + '...';
                     loadMessages();
 
-                    // Polling каждые 2 секунды
                     if (pollInterval) clearInterval(pollInterval);
                     pollInterval = setInterval(() => {
                         if (currentUser && currentChatWith) {
@@ -539,7 +519,6 @@
                 }
             }
 
-            // Обработка параметров URL
             function handleUrlParams() {
                 const urlParams = new URLSearchParams(window.location.search);
                 const to = urlParams.get('to');
