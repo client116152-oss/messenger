@@ -55,7 +55,7 @@
             padding: 5px 15px;
             border-radius: 30px;
         }
-        #my-id {
+        #my-name {
             font-weight: bold;
             max-width: 150px;
             overflow: hidden;
@@ -193,6 +193,15 @@
             opacity: 0.7;
             margin-top: 5px;
         }
+        .message .sender-name {
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #666;
+        }
+        .message.sent .sender-name {
+            color: rgba(255,255,255,0.8);
+        }
         /* Форма отправки */
         #message-form {
             display: flex;
@@ -258,6 +267,59 @@
         #dialogs-view {
             display: block;
         }
+        /* Модальное окно для имени */
+        #name-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 350px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 30px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .modal-content input:focus {
+            border-color: #4a76a8;
+        }
+        .modal-content button {
+            background: #4a76a8;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .modal-content button:hover {
+            background: #3a5a80;
+        }
         /* Индикатор загрузки */
         .fa-spinner {
             animation: spin 1s infinite linear;
@@ -275,7 +337,7 @@
             <h1><i class="fas fa-comment-dots"></i> Мессенджер</h1>
             <div id="user-info">
                 <i class="fas fa-user-circle"></i>
-                <span id="my-id"></span>
+                <span id="my-name"></span>
                 <button id="copy-link"><i class="fas fa-copy"></i> Копировать ссылку</button>
             </div>
         </header>
@@ -306,9 +368,19 @@
         </main>
     </div>
 
+    <!-- Модальное окно для ввода имени -->
+    <div id="name-modal">
+        <div class="modal-content">
+            <h3>Добро пожаловать!</h3>
+            <p>Введите ваше имя, чтобы другие могли вас узнать:</p>
+            <input type="text" id="username-input" placeholder="Ваше имя" autocomplete="off">
+            <button id="save-username">Сохранить</button>
+        </div>
+    </div>
+
     <script>
         (function() {
-            // --- НАСТРОЙКИ SUPABASE (проверьте, что ключи актуальны) ---
+            // --- НАСТРОЙКИ SUPABASE ---
             const SUPABASE_URL = 'https://xhngobdwuxfqhwqebujy.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhobmdvYmR3dXhmcWh3cWVidWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzcyNTcsImV4cCI6MjA4ODkxMzI1N30.FXw6_rJdveQG1D3fBiP3QO1gPht6LKeikLb1QinR9vc';
 
@@ -317,8 +389,10 @@
             let currentUser = null;
             let currentChatWith = null;
             let pollInterval = null;
+            let currentMessageIds = new Set(); // для сравнения и предотвращения лишних перерисовок
+            let usernameCache = new Map(); // кэш имён пользователей { userId: username }
 
-            const myIdSpan = document.getElementById('my-id');
+            const myNameSpan = document.getElementById('my-name');
             const copyLinkBtn = document.getElementById('copy-link');
             const dialogsView = document.getElementById('dialogs-view');
             const chatView = document.getElementById('chat-view');
@@ -329,6 +403,9 @@
             const messageText = document.getElementById('message-text');
             const messageImage = document.getElementById('message-image');
             const backBtn = document.getElementById('back-to-dialogs');
+            const nameModal = document.getElementById('name-modal');
+            const usernameInput = document.getElementById('username-input');
+            const saveUsernameBtn = document.getElementById('save-username');
 
             // Анонимная аутентификация
             async function signInAnonymously() {
@@ -336,20 +413,71 @@
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session) {
                         currentUser = session.user;
-                        myIdSpan.textContent = currentUser.id;
-                        handleUrlParams();
+                        await checkProfile();
                         return;
                     }
                     const { data, error } = await supabase.auth.signInAnonymously();
                     if (error) throw error;
                     currentUser = data.user;
-                    myIdSpan.textContent = currentUser.id;
-                    handleUrlParams();
+                    await checkProfile();
                 } catch (err) {
                     console.error('Auth error:', err);
                 }
             }
-            signInAnonymously();
+
+            // Проверка наличия профиля (имени)
+            async function checkProfile() {
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('username')
+                    .eq('id', currentUser.id)
+                    .maybeSingle();
+
+                if (error) {
+                    console.error('Error checking profile:', error);
+                    return;
+                }
+
+                if (profile) {
+                    // Профиль существует
+                    usernameCache.set(currentUser.id, profile.username);
+                    myNameSpan.textContent = profile.username;
+                    handleUrlParams();
+                } else {
+                    // Показываем модальное окно для ввода имени
+                    showNameModal();
+                }
+            }
+
+            // Показать модальное окно
+            function showNameModal() {
+                nameModal.style.display = 'flex';
+                usernameInput.value = '';
+                usernameInput.focus();
+            }
+
+            // Сохранить имя
+            saveUsernameBtn.addEventListener('click', async () => {
+                const username = usernameInput.value.trim();
+                if (!username) {
+                    alert('Введите имя');
+                    return;
+                }
+
+                const { error } = await supabase
+                    .from('profiles')
+                    .insert([{ id: currentUser.id, username }]);
+
+                if (error) {
+                    alert('Ошибка сохранения имени: ' + error.message);
+                    return;
+                }
+
+                usernameCache.set(currentUser.id, username);
+                myNameSpan.textContent = username;
+                nameModal.style.display = 'none';
+                handleUrlParams();
+            });
 
             // Копирование ссылки
             copyLinkBtn.addEventListener('click', () => {
@@ -357,6 +485,27 @@
                 const link = `${window.location.origin}${window.location.pathname}?to=${currentUser.id}`;
                 navigator.clipboard.writeText(link).then(() => alert('Ссылка скопирована!'));
             });
+
+            // Получение имени пользователя по ID (с кэшированием)
+            async function getUsername(userId) {
+                if (usernameCache.has(userId)) {
+                    return usernameCache.get(userId);
+                }
+                try {
+                    const { data, error } = await supabase
+                        .from('profiles')
+                        .select('username')
+                        .eq('id', userId)
+                        .maybeSingle();
+                    if (error) throw error;
+                    const name = data ? data.username : userId.slice(0,8);
+                    usernameCache.set(userId, name);
+                    return name;
+                } catch (err) {
+                    console.error('Error fetching username:', err);
+                    return userId.slice(0,8);
+                }
+            }
 
             // Загрузка списка диалогов
             async function loadDialogs() {
@@ -373,15 +522,17 @@
                 }
 
                 const dialogsMap = new Map();
-                data.forEach(msg => {
+                for (const msg of data) {
                     const otherId = msg.from_user === currentUser.id ? msg.to_user : msg.from_user;
                     if (!dialogsMap.has(otherId) || new Date(msg.created_at) > new Date(dialogsMap.get(otherId).lastTimestamp)) {
+                        const otherName = await getUsername(otherId);
                         dialogsMap.set(otherId, {
+                            otherName,
                             lastMessage: msg.text || (msg.image_url ? '[Изображение]' : ''),
                             lastTimestamp: msg.created_at
                         });
                     }
-                });
+                }
 
                 const dialogs = Array.from(dialogsMap.entries()).map(([userId, info]) => ({
                     userId,
@@ -401,7 +552,7 @@
                     const li = document.createElement('li');
                     li.className = 'dialog-item';
                     li.innerHTML = `
-                        <span class="dialog-user"><i class="fas fa-user"></i> ${dialog.userId.slice(0,8)}...</span>
+                        <span class="dialog-user"><i class="fas fa-user"></i> ${dialog.otherName}</span>
                         <span class="dialog-last">${dialog.lastMessage}</span>
                     `;
                     li.addEventListener('click', () => {
@@ -411,7 +562,7 @@
                 });
             }
 
-            // Улучшенная загрузка сообщений без лишних перерисовок
+            // Загрузка сообщений для текущего чата
             async function loadMessages() {
                 if (!currentUser || !currentChatWith) return;
 
@@ -426,36 +577,45 @@
                     return;
                 }
 
-                // Проверяем, нужно ли обновлять DOM
-                const currentLastId = messagesContainer.lastElementChild?.dataset?.messageId;
-                const newLastId = data[data.length-1]?.id;
-
-                if (data.length === 0) {
-                    messagesContainer.innerHTML = '<div class="empty-state">Нет сообщений. Напишите что-нибудь!</div>';
-                } else if (currentLastId !== newLastId) {
-                    renderMessages(data);
+                // Проверяем, изменились ли сообщения
+                const newIds = new Set(data.map(m => m.id));
+                if (newIds.size !== currentMessageIds.size || ![...newIds].every(id => currentMessageIds.has(id))) {
+                    await renderMessages(data);
+                    currentMessageIds = newIds;
                 }
             }
 
-            function renderMessages(messages) {
+            async function renderMessages(messages) {
                 messagesContainer.innerHTML = '';
-                messages.forEach(msg => appendMessage(msg));
+                if (messages.length === 0) {
+                    messagesContainer.innerHTML = '<div class="empty-state">Нет сообщений. Напишите что-нибудь!</div>';
+                    return;
+                }
+                // Для каждого сообщения нужно получить имя отправителя
+                const senderIds = [...new Set(messages.map(m => m.from_user))];
+                await Promise.all(senderIds.map(id => getUsername(id))); // заполняем кэш
+                for (const msg of messages) {
+                    await appendMessage(msg);
+                }
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
 
-            function appendMessage(msg) {
+            async function appendMessage(msg) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${msg.from_user === currentUser.id ? 'sent' : 'received'}`;
-                messageDiv.dataset.messageId = msg.id; // для отслеживания изменений
+                messageDiv.dataset.messageId = msg.id;
 
-                let content = '';
+                const senderName = msg.from_user === currentUser.id 
+                    ? 'Вы' 
+                    : (usernameCache.get(msg.from_user) || (await getUsername(msg.from_user)));
+
+                let content = `<div class="sender-name">${senderName}</div>`;
                 if (msg.text) content += `<p>${msg.text}</p>`;
                 if (msg.image_url) content += `<img src="${msg.image_url}" alt="image" onclick="window.open(this.src)">`;
                 content += `<small>${new Date(msg.created_at).toLocaleTimeString()}</small>`;
 
                 messageDiv.innerHTML = content;
                 messagesContainer.appendChild(messageDiv);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
 
             // Отправка сообщения
@@ -485,16 +645,14 @@
                             .from('images')
                             .upload(fileName, imageFile);
 
-                        if (uploadError) {
-                            throw new Error('Ошибка загрузки изображения. Убедитесь, что настроены политики Storage (см. инструкцию).');
-                        }
+                        if (uploadError) throw uploadError;
 
                         const { data: urlData } = supabase.storage
                             .from('images')
                             .getPublicUrl(fileName);
                         image_url = urlData.publicUrl;
                     } catch (err) {
-                        alert(err.message);
+                        alert('Ошибка загрузки: ' + err.message);
                         uploadButton.innerHTML = originalText;
                         uploadButton.disabled = false;
                         return;
@@ -539,7 +697,10 @@
                 } else if (view === 'chat') {
                     dialogsView.style.display = 'none';
                     chatView.style.display = 'flex';
-                    chatWithSpan.textContent = currentChatWith.slice(0,8) + '...';
+                    // Отображаем имя собеседника
+                    getUsername(currentChatWith).then(name => {
+                        chatWithSpan.textContent = name;
+                    });
                     loadMessages();
 
                     if (pollInterval) clearInterval(pollInterval);
@@ -547,7 +708,7 @@
                         if (currentUser && currentChatWith) {
                             loadMessages();
                         }
-                    }, 3000); // увеличен интервал до 3 секунд
+                    }, 3000);
                 }
             }
 
@@ -571,6 +732,9 @@
             window.addEventListener('popstate', () => {
                 if (currentUser) handleUrlParams();
             });
+
+            // Запуск аутентификации
+            signInAnonymously();
         })();
     </script>
 </body>
