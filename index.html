@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мессенджер на Supabase</title>
-    <!-- Подключаем шрифт и иконки Font Awesome (для красоты) -->
+    <!-- Шрифт и иконки Font Awesome (для красоты) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * {
@@ -82,6 +82,9 @@
             background: #f5f7fb;
         }
         /* Диалоги */
+        #dialogs-view h2 {
+            margin-bottom: 15px;
+        }
         #dialogs-list {
             list-style: none;
             display: flex;
@@ -219,6 +222,9 @@
             cursor: pointer;
             color: #4a76a8;
             transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
         .image-upload-label:hover {
             background: #e0e2e5;
@@ -232,6 +238,9 @@
             cursor: pointer;
             font-weight: 600;
             transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
         #message-form button:hover {
             background: #3a5a80;
@@ -244,6 +253,16 @@
         .loading {
             text-align: center;
             color: #888;
+        }
+        /* Исправление видимости форм */
+        #chat-view {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+        #dialogs-view {
+            display: block;
+            height: 100%;
         }
     </style>
     <!-- Supabase JS -->
@@ -263,12 +282,12 @@
         <main>
             <!-- Список диалогов -->
             <div id="dialogs-view">
-                <h2 style="margin-bottom: 15px;">Диалоги</h2>
+                <h2>Диалоги</h2>
                 <ul id="dialogs-list"></ul>
             </div>
 
             <!-- Чат -->
-            <div id="chat-view" style="display: none;">
+            <div id="chat-view">
                 <div id="chat-header">
                     <button id="back-to-dialogs"><i class="fas fa-arrow-left"></i></button>
                     <h3>Чат с <span id="chat-with"></span></h3>
@@ -315,7 +334,6 @@
             // Анонимная аутентификация
             async function signInAnonymously() {
                 try {
-                    // Пытаемся получить текущую сессию
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session) {
                         currentUser = session.user;
@@ -358,7 +376,6 @@
                     return;
                 }
 
-                // Группируем по собеседнику, оставляя последнее сообщение
                 const dialogsMap = new Map();
                 data.forEach(msg => {
                     const otherId = msg.from_user === currentUser.id ? msg.to_user : msg.from_user;
@@ -507,7 +524,8 @@
                     loadDialogs();
                 } else if (view === 'chat') {
                     dialogsView.style.display = 'none';
-                    chatView.style.display = 'block';
+                    chatView.style.display = 'flex'; // flex, чтобы форма была видна
+                    chatView.style.flexDirection = 'column';
                     chatWithSpan.textContent = currentChatWith.slice(0,8) + '...';
                     loadMessages();
 
